@@ -32,6 +32,24 @@ include 'includes/header.php'; // Üst menü
 
 <div class="card shadow-sm">
     <div class="card-body">
+        
+        <?php if (isset($_GET['status']) && isset($_GET['message'])): ?>
+            <?php 
+                $alertType = $_GET['status'] == 'success' ? 'alert-success' : 'alert-danger';
+                $icon = $_GET['status'] == 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            ?>
+            <div class="alert <?php echo $alertType; ?> alert-dismissible fade show" role="alert">
+                <i class="fa-solid <?php echo $icon; ?> me-2"></i> 
+                <?php echo htmlspecialchars($_GET['message']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+            ```
+
+    <div class="card-body">
         <div class="table-responsive">
             <table class="table table-hover table-striped">
                 <thead class="table-dark">
@@ -63,7 +81,12 @@ include 'includes/header.php'; // Üst menü
                         <?php if ($_SESSION['user_role'] == 1): ?>
                             <td>
                                 <a href="#" class="btn btn-sm btn-warning" title="Düzenle"><i class="fa-solid fa-pen"></i></a>
-                                <a href="#" onclick="return confirm('Bu personeli silmek istediğine emin misin?')" class="btn btn-sm btn-danger" title="Sil"><i class="fa-solid fa-trash"></i></a>
+                                <a href="delete.php?id=<?php echo $user['id']; ?>" 
+   onclick="return confirm('Bu personeli silmek istediğine emin misin?')" 
+   class="btn btn-sm btn-danger" 
+   title="Sil">
+   <i class="fa-solid fa-trash"></i>
+</a>
                             </td>
                         <?php endif; ?>
                     </tr>
