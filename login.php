@@ -1,30 +1,31 @@
 <?php
-// Oturumu başlat
+// login.php - GÜNCELLENMİŞ VERSİYON
 session_start();
 require 'db.php';
 
-// KURAL 1: Eğer kullanıcı ZATEN giriş yapmışsa, Login sayfasında ne işi var?
-// Onu hemen ana sayfaya (index.php) gönder.
+// Zaten giriş yapmışsa içeri al
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
 }
 
-// NOT: Buraya "Giriş yapmamışsa login.php'ye git" kodu ASLA KONMAZ.
-// Çünkü zaten şu an login.php'deyiz! Kendi kendine yönlendirme döngüye sokar.
-
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $email = $_POST['email'];
+    $email = trim($_POST['email']);
     $password = $_POST['password'];
 
+    // Kullanıcıyı e-postaya göre bul
     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
     $stmt->execute(['email' => $email]);
     $user = $stmt->fetch();
 
-    if ($user && $password === $user['password']) {
-        // Giriş Başarılı -> Bilekliği Tak
+    // DÜZELTME BURADA:
+    // password_verify fonksiyonu, girilen "1234" şifresini alır,
+    // veritabanındaki hash ile matematiksel olarak eşleşip eşleşmediğine bakar.
+    if ($user && password_verify($password, $user['password'])) {
+        
+        // Giriş Başarılı
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_name'] = $user['full_name'];
         $_SESSION['user_role'] = $user['role_id'];
@@ -32,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         header("Location: index.php");
         exit;
     } else {
+        // Güvenlik için detay vermiyoruz (Email mi yanlış şifre mi söyleme)
         $error = "Hatalı e-posta veya şifre!";
     }
 }
@@ -61,11 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <form method="POST" action="">
             <div class="mb-3">
                 <label>E-posta Adresi</label>
-                <input type="email" name="email" class="form-control" required placeholder="admin@sirket.com">
+                <input type="email" name="email" class="form-control" required>
             </div>
             <div class="mb-3">
                 <label>Şifre</label>
-                <input type="password" name="password" class="form-control" required placeholder="1234">
+                <input type="password" name="password" class="form-control" required>
             </div>
             <button type="submit" class="btn btn-primary w-100">Giriş Yap</button>
         </form>
