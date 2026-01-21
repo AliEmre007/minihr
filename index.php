@@ -1,5 +1,5 @@
 <?php
-// index.php - FINAL DASHBOARD VERSİYONU
+// index.php - TAMAMLANMIŞ ARAMA VE FİLTRELEME VERSİYONU
 session_start();
 require 'db.php';
 
@@ -10,24 +10,47 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // --- İSTATİSTİKLER (Dashboard Verileri) ---
-// Toplam Personel
 $total_users = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-
-// Toplam Ödenen Maaş
 $total_salary = $pdo->query("SELECT SUM(salary) FROM users")->fetchColumn();
-
-// Ortalama Maaş
 $avg_salary = $pdo->query("SELECT AVG(salary) FROM users")->fetchColumn();
 
 
-// --- PERSONEL LİSTESİ (JOIN İLE DETAYLI ÇEKME) ---
-// departments ve roles tablolarını bağlayarak ID yerine İsimleri alıyoruz
+// --- ARAMA VE FİLTRELEME MANTIĞI (PHP KISMI) ---
+// 1. URL'den gelen verileri al (yoksa boş kabul et)
+$search_keyword = isset($_GET['search']) ? trim($_GET['search']) : '';
+$filter_dept = isset($_GET['department']) ? $_GET['department'] : '';
+
+// 2. Dinamik SQL Sorgusunu Hazırla
+// "WHERE 1=1" taktiği: Sorguya dinamik olarak "AND" eklemeyi kolaylaştırır.
 $sql = "SELECT users.*, roles.name as role_name, departments.name as dept_name 
         FROM users 
         LEFT JOIN roles ON users.role_id = roles.id 
         LEFT JOIN departments ON users.department_id = departments.id
-        ORDER BY users.id ASC";
-$users = $pdo->query($sql)->fetchAll();
+        WHERE 1=1"; 
+
+$params = [];
+
+// 3. Eğer isim aranıyorsa sorguya ekle
+if (!empty($search_keyword)) {
+    $sql .= " AND users.full_name LIKE :keyword";
+    $params[':keyword'] = "%$search_keyword%";
+}
+
+// 4. Eğer departman seçildiyse sorguya ekle
+if (!empty($filter_dept)) {
+    $sql .= " AND users.department_id = :dept_id";
+    $params[':dept_id'] = $filter_dept;
+}
+
+$sql .= " ORDER BY users.id ASC";
+
+// 5. Sorguyu Güvenli Şekilde Çalıştır (Prepare/Execute)
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$users = $stmt->fetchAll();
+
+// 6. Filtre menüsü (Select kutusu) için tüm departmanları çek
+$departments = $pdo->query("SELECT * FROM departments")->fetchAll();
 
 include 'includes/header.php'; 
 ?>
@@ -82,6 +105,44 @@ include 'includes/header.php';
     </div>
 </div>
 
+<div class="card shadow-sm mb-4 border-0 bg-light">
+    <div class="card-body py-3">
+        <form method="GET" action="index.php" class="row g-2 align-items-center">
+            
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                    <input type="text" name="search" class="form-control border-start-0" 
+                           placeholder="Personel adı veya soyadı ara..." 
+                           value="<?php echo htmlspecialchars($search_keyword); ?>">
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <select name="department" class="form-select">
+                    <option value="">Tüm Departmanlar</option>
+                    <?php foreach ($departments as $dept): ?>
+                        <option value="<?php echo $dept['id']; ?>" 
+                            <?php echo ($filter_dept == $dept['id']) ? 'selected' : ''; ?>>
+                            <?php echo $dept['name']; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filtrele</button>
+                
+                <?php if(!empty($search_keyword) || !empty($filter_dept)): ?>
+                    <a href="index.php" class="btn btn-secondary" title="Filtreleri Temizle">
+                        <i class="fa-solid fa-xmark"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="card shadow-sm">
     <div class="card-header bg-white">
         <h5 class="mb-0 text-secondary"><i class="fa-solid fa-list me-2"></i>Personel Listesi</h5>
@@ -115,53 +176,63 @@ include 'includes/header.php';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($users as $user): ?>
-                    <tr>
-                        <td>#<?php echo $user['id']; ?></td>
-                        
-                        <td class="fw-bold">
-                            <div class="d-flex align-items-center">
-                                <div class="avatar bg-secondary text-white rounded-circle me-2 d-flex justify-content-center align-items-center" style="width: 35px; height: 35px;">
-                                    <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
+                    <?php if (count($users) > 0): // Eğer kayıt varsa listele ?>
+                        <?php foreach ($users as $user): ?>
+                        <tr>
+                            <td>#<?php echo $user['id']; ?></td>
+                            
+                            <td class="fw-bold">
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar bg-secondary text-white rounded-circle me-2 d-flex justify-content-center align-items-center" style="width: 35px; height: 35px;">
+                                        <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
+                                    </div>
+                                    <?php echo htmlspecialchars($user['full_name']); ?>
                                 </div>
-                                <?php echo htmlspecialchars($user['full_name']); ?>
-                            </div>
-                        </td>
-
-                        <td>
-                            <span class="badge bg-light text-dark border">
-                                <?php echo htmlspecialchars($user['dept_name']); ?>
-                            </span>
-                        </td>
-
-                        <td>
-                            <?php if($user['role_name'] == 'Admin'): ?>
-                                <span class="badge bg-danger"><i class="fa-solid fa-shield-halved me-1"></i>Admin</span>
-                            <?php else: ?>
-                                <span class="badge bg-primary">Personel</span>
-                            <?php endif; ?>
-                        </td>
-
-                        <td class="font-monospace text-success">
-                            <?php echo number_format($user['salary'], 2, ',', '.'); ?> ₺
-                        </td>
-
-                        <?php if ($_SESSION['user_role'] == 1): ?>
-                            <td class="text-end">
-                                <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-outline-warning" title="Düzenle">
-                                    <i class="fa-solid fa-pen"></i>
-                                </a>
-                                
-                                <a href="delete.php?id=<?php echo $user['id']; ?>" 
-                                   onclick="return confirm('<?php echo $user['full_name']; ?> isimli personeli silmek istediğine emin misin?')" 
-                                   class="btn btn-sm btn-outline-danger" 
-                                   title="Sil">
-                                   <i class="fa-solid fa-trash"></i>
-                                </a>
                             </td>
-                        <?php endif; ?>
-                    </tr>
-                    <?php endforeach; ?>
+
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    <?php echo htmlspecialchars($user['dept_name']); ?>
+                                </span>
+                            </td>
+
+                            <td>
+                                <?php if($user['role_name'] == 'Admin'): ?>
+                                    <span class="badge bg-danger"><i class="fa-solid fa-shield-halved me-1"></i>Admin</span>
+                                <?php else: ?>
+                                    <span class="badge bg-primary">Personel</span>
+                                <?php endif; ?>
+                            </td>
+
+                            <td class="font-monospace text-success">
+                                <?php echo number_format($user['salary'], 2, ',', '.'); ?> ₺
+                            </td>
+
+                            <?php if ($_SESSION['user_role'] == 1): ?>
+                                <td class="text-end">
+                                    <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-outline-warning" title="Düzenle">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </a>
+                                    
+                                    <a href="delete.php?id=<?php echo $user['id']; ?>" 
+                                       onclick="return confirm('<?php echo $user['full_name']; ?> isimli personeli silmek istediğine emin misin?')" 
+                                       class="btn btn-sm btn-outline-danger" 
+                                       title="Sil">
+                                       <i class="fa-solid fa-trash"></i>
+                                    </a>
+                                </td>
+                            <?php endif; ?>
+                        </tr>
+                        <?php endforeach; ?>
+                    
+                    <?php else: // Eğer kayıt YOKSA bunu göster ?>
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-magnifying-glass fa-2x mb-3"></i><br>
+                                Aradığınız kriterlere uygun personel bulunamadı.
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
