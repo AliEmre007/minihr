@@ -57,11 +57,18 @@ include 'includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="fa-solid fa-chart-pie me-2"></i>Yönetim Paneli</h1>
-    <?php if ($_SESSION['user_role'] == 1): ?>
-        <a href="add_user.php" class="btn btn-primary shadow">
-            <i class="fa-solid fa-user-plus me-1"></i> Yeni Personel Ekle
+    
+    <div class="d-flex gap-2">
+        <a href="export.php" class="btn btn-success shadow">
+            <i class="fa-solid fa-file-excel me-1"></i> Excel'e Aktar
         </a>
-    <?php endif; ?>
+
+        <?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] == 1): ?>
+            <a href="add_user.php" class="btn btn-primary shadow">
+                <i class="fa-solid fa-user-plus me-1"></i> Yeni Personel Ekle
+            </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="row mb-4">
