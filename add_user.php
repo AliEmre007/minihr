@@ -1,140 +1,138 @@
 <?php
+// add_user.php - Resim Yükleme Özellikli
 session_start();
 require 'db.php';
-require 'includes/functions.php'; // Alet çantamızı dahil ettik
 
-// GÜVENLİK 1: Sadece Admin girebilir!
-if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] != 1) {
-    die("Erişim Reddedildi: Bu sayfayı görüntüleme yetkiniz yok.");
+// Güvenlik: Sadece Admin girebilir
+if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] != 1) {
+    header("Location: login.php");
+    exit;
 }
 
-$message = "";
-$error = "";
+// Departmanları ve Rolleri Çek (Select kutuları için)
+$departments = $pdo->query("SELECT * FROM departments")->fetchAll();
+$roles = $pdo->query("SELECT * FROM roles")->fetchAll();
 
-// --- FORM GÖNDERİLDİ Mİ? (BACKEND) ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    
-    // GÜVENLİK 2: CSRF Kontrolü
-    validate_csrf_token($_POST['csrf_token']);
-
-    // Formdan gelen verileri al
     $full_name = trim($_POST['full_name']);
     $email = trim($_POST['email']);
-    $password = $_POST['password']; // Şifreleme yapacağız
     $salary = $_POST['salary'];
     $department_id = $_POST['department_id'];
     $role_id = $_POST['role_id'];
+    
+    // Varsayılan şifre: 1234
+    $password = password_hash("1234", PASSWORD_DEFAULT);
 
-    // Basit validasyon (Boş alan var mı?)
-    if (empty($full_name) || empty($email) || empty($password)) {
-        $error = "Lütfen tüm zorunlu alanları doldurun.";
-    } else {
-        // GÜVENLİK 3: Şifreyi Hashle (Asla düz metin kaydetme!)
-        // '1234' yerine '$2y$10$...' gibi karmaşık bir string olacak.
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    // --- RESİM YÜKLEME İŞLEMİ ---
+    $profile_pic = null; // Varsayılan olarak resim yok
 
-        try {
-            // Veritabanına Ekleme Sorgusu
-            $sql = "INSERT INTO users (full_name, email, password, salary, department_id, role_id) 
-                    VALUES (:im, :em, :pw, :sl, :dp, :rl)";
-            
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                'im' => $full_name,
-                'em' => $email,
-                'pw' => $hashed_password,
-                'sl' => $salary,
-                'dp' => $department_id,
-                'rl' => $role_id
-            ]);
+    // 1. Dosya seçilmiş mi kontrol et
+    if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] == 0) {
+        
+        $allowed = ['jpg', 'jpeg', 'png', 'webp']; // İzin verilen uzantılar
+        $filename = $_FILES['avatar']['name'];
+        $filetype = $_FILES['avatar']['type'];
+        $filesize = $_FILES['avatar']['size'];
+        
+        // Dosya uzantısını al (örn: jpg)
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-            $message = "Personel başarıyla eklendi!";
-            
-            // Formun tekrar gönderilmesini önlemek için yönlendirme yapabiliriz
-            // header("Location: index.php"); exit; 
-            // (Şimdilik mesajı görmek için yönlendirme yapmıyoruz)
+        // 2. Uzantı kontrolü (Güvenlik)
+        if (in_array($ext, $allowed)) {
+            // 3. Dosya boyut kontrolü (Örn: 5MB'dan büyük olmasın)
+            if ($filesize < 5 * 1024 * 1024) {
+                // 4. Benzersiz isim oluştur (zaman damgası + rastgele sayı)
+                $new_filename = time() . "_" . rand(1000, 9999) . "." . $ext;
+                $upload_path = "uploads/" . $new_filename;
 
-        } catch (PDOException $e) {
-            // Email unique olduğu için aynı maille kayıt olursa hata verir
-            if ($e->getCode() == 23000) {
-                $error = "Bu e-posta adresi zaten kayıtlı!";
+                // 5. Dosyayı geçici klasörden bizim klasöre taşı
+                if (move_uploaded_file($_FILES['avatar']['tmp_name'], $upload_path)) {
+                    $profile_pic = $new_filename; // Veritabanına kaydedilecek isim
+                }
             } else {
-                $error = "Veritabanı hatası: " . $e->getMessage();
+                echo "<script>alert('Dosya boyutu çok yüksek! (Max 5MB)');</script>";
             }
+        } else {
+            echo "<script>alert('Sadece JPG, PNG ve WEBP formatları yüklenebilir!');</script>";
         }
     }
-}
+    // --- RESİM İŞLEMİ BİTİŞ ---
 
-// --- SELECT KUTULARI İÇİN VERİ ÇEKME ---
-$roles = $pdo->query("SELECT * FROM roles")->fetchAll();
-$departments = $pdo->query("SELECT * FROM departments")->fetchAll();
+
+    // Veritabanına Kayıt
+    try {
+        $stmt = $pdo->prepare("INSERT INTO users (full_name, email, password, role_id, department_id, salary, profile_pic) 
+                               VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$full_name, $email, $password, $role_id, $department_id, $salary, $profile_pic]);
+
+        header("Location: index.php?status=success&message=Personel ve resim başarıyla eklendi.");
+        exit;
+    } catch (PDOException $e) {
+        $error = "Hata: " . $e->getMessage();
+    }
+}
 
 include 'includes/header.php';
 ?>
 
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-6">
         <div class="card shadow">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0"><i class="fa-solid fa-user-plus me-2"></i>Yeni Personel Ekle</h5>
             </div>
             <div class="card-body">
-
-                <?php if($message): ?>
-                    <div class="alert alert-success"><?php echo $message; ?></div>
-                <?php endif; ?>
-                <?php if($error): ?>
+                
+                <?php if(isset($error)): ?>
                     <div class="alert alert-danger"><?php echo $error; ?></div>
                 <?php endif; ?>
 
-                <form method="POST" action="">
-                    <input type="hidden" name="csrf_token" value="<?php echo create_csrf_token(); ?>">
-
+                <form method="POST" enctype="multipart/form-data">
+                    
                     <div class="mb-3">
-                        <label>Ad Soyad <span class="text-danger">*</span></label>
+                        <label>Ad Soyad</label>
                         <input type="text" name="full_name" class="form-control" required>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label>E-Posta <span class="text-danger">*</span></label>
-                            <input type="email" name="email" class="form-control" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label>Şifre <span class="text-danger">*</span></label>
-                            <input type="password" name="password" class="form-control" required>
-                        </div>
+                    <div class="mb-3">
+                        <label>E-posta</label>
+                        <input type="email" name="email" class="form-control" required>
                     </div>
 
                     <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label>Maaş (TL)</label>
-                            <input type="number" step="0.01" name="salary" class="form-control">
-                        </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <label>Departman</label>
                             <select name="department_id" class="form-select">
-                                <?php foreach($departments as $dept): ?>
+                                <?php foreach ($departments as $dept): ?>
                                     <option value="<?php echo $dept['id']; ?>"><?php echo $dept['name']; ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label>Yetki Rolü</label>
+                        <div class="col-md-6 mb-3">
+                            <label>Rol</label>
                             <select name="role_id" class="form-select">
-                                <?php foreach($roles as $role): ?>
+                                <?php foreach ($roles as $role): ?>
                                     <option value="<?php echo $role['id']; ?>"><?php echo $role['name']; ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
+                    <div class="mb-3">
+                        <label>Maaş</label>
+                        <input type="number" name="salary" class="form-control" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Profil Fotoğrafı</label>
+                        <input type="file" name="avatar" class="form-control" accept="image/*">
+                        <div class="form-text">Desteklenen formatlar: .jpg, .png, .jpeg</div>
+                    </div>
+
+                    <div class="d-grid">
                         <button type="submit" class="btn btn-primary">Kaydet</button>
-                        <a href="index.php" class="btn btn-secondary">İptal / Geri Dön</a>
                     </div>
                 </form>
-
             </div>
         </div>
     </div>

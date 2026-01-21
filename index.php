@@ -183,9 +183,18 @@ include 'includes/header.php';
                             
                             <td class="fw-bold">
                                 <div class="d-flex align-items-center">
-                                    <div class="avatar bg-secondary text-white rounded-circle me-2 d-flex justify-content-center align-items-center" style="width: 35px; height: 35px;">
-                                        <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
-                                    </div>
+                                    
+                                    <?php if (!empty($user['profile_pic']) && file_exists('uploads/' . $user['profile_pic'])): ?>
+                                        <img src="uploads/<?php echo $user['profile_pic']; ?>" 
+                                            alt="Profil" 
+                                            class="rounded-circle me-2 border" 
+                                            style="width: 40px; height: 40px; object-fit: cover;">
+                                    <?php else: ?>
+                                        <div class="avatar bg-secondary text-white rounded-circle me-2 d-flex justify-content-center align-items-center" 
+                                            style="width: 40px; height: 40px; font-size: 14px;">
+                                            <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <?php echo htmlspecialchars($user['full_name']); ?>
                                 </div>
                             </td>
